@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PIEZO | Energy Dashboard</title>
+    <style>
+        :root { --bg: #0a0e14; --card: #161b22; --accent: #58a6ff; --text: #c9d1d9; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; align-items: center; padding: 40px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; width: 100%; max-width: 900px; }
+        .card { background: var(--card); padding: 30px; border-radius: 12px; border: 1px solid #30363d; text-align: center; }
+        .val { font-size: 3.5rem; font-weight: 800; color: var(--accent); margin: 10px 0; font-variant-numeric: tabular-nums; }
+        .label { font-size: 0.9rem; color: #8b949e; text-transform: uppercase; letter-spacing: 1px; }
+        button { background: var(--accent); color: #fff; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 1rem; font-weight: bold; transition: 0.2s; }
+        button:hover { opacity: 0.8; }
+        #status { margin-top: 15px; font-size: 0.8rem; }
+        .online { color: #3fb950; }
+        .offline { color: #f85149; }
+    </style>
+</head>
+<body>
+
+    <h1>Piezo Harvest Monitor</h1>
+    <button id="connectBtn">Connect Arduino</button>
+    <div id="status" class="offline">● Disconnected</div>
+
+    <div class="grid" style="margin-top: 30px;">
+        <div class="card">
+            <div class="label">Instant Voltage</div>
+            <div class="val" id="voltage">0.00</div>
+            <div class="label">Volts (V)</div>
+        </div>
+
+        <div class="card">
+            <div class="label">Cumulative Energy</div>
+            <div class="val" id="total">0.0000</div>
+            <div class="label">Joules (J)</div>
+        </div>
+    </div>
+
+    <script>
+        let totalJoules = 0;
+        const btn = document.getElementById('connectBtn');
+        const status = document.getElementById('status');
+        const vDisp = document.getElementById('voltage');
+        const tDisp = document.getElementById('total');
+
+        btn.addEventListener('click', async () => {
+            try {
+                const port = await navigator.serial.requestPort();
+                await port.open({ baudRate: 9600 });
+                
+                status.innerText = "● Online";
+                status.className = "online";
+                btn.style.display = "none";
+
+                const reader = port.readable.getReader();
+                const decoder = new TextDecoder();
+                let buffer = "";
+
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value);
+                    let lines = buffer.split("\n");
+                    buffer = lines.pop(); // Keep partial line in buffer
+
+                    for (let line of lines) {
+                        const v = parseFloat(line.trim());
+                        if (!isNaN(v)) {
+                            vDisp.innerText = v.toFixed(2);
+                            
+                            // Simple Joule Calculation (V^2 * time)
+                            // Adjust the multiplier based on your resistor/capacitor setup
+                            if (v > 0.05) {
+                                totalJoules += (v * v * 0.001); 
+                                tDisp.innerText = totalJoules.toFixed(4);
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error(err);
+                status.innerText = "● Connection Failed";
+                status.className = "offline";
+            }
+        });
+    </script>
+</body>
+</html>
